@@ -1,6 +1,6 @@
 const {inquirer} = require("inquirer");
+const connection = require('./db/connection');
 const logo = require("asciiart-logo");
-const db = require("./db");
 require("console.table");
 initApp();
 
@@ -44,7 +44,7 @@ function loadPrompts() {
             } else if (answer.choices === "Update Role") {
                 updateRole();
             } else if (answer.choices === "Quit") {
-                Connection.end();
+                connection.end();
             }
         })
 }
@@ -198,3 +198,61 @@ function employeePrompts(roles) {
     })
 }
 
+function updateRole() {
+    const query = `SELECT
+        employee.id,
+        employee.first_name,
+        employee.last_name,
+        role.title,
+        department.name,
+        role.salary,
+        CONCAT(manager.first_name, ' ', manager.last_name) AS manager
+        FROM employee
+        JOIN role ON employee.role_id = role.id
+        JOIN department ON department.id = role.department_id`;
+    connection.query(query, (err, res) => {
+        if(err) throw err;
+        const employee = res.map(({id, first_name, last_name}) => ({
+            value: id,
+            name: `${first_name}, ${last_name}`
+        }));
+        console.table(res);
+        updateRoleChoices();
+    })
+};
+
+function updateRoleChoices() {
+    const query = `SELECT role.id, role.title FROM role`;
+    connection.query(query, (err, res) => {
+        if(err) throw err;
+        const roleChoices = res.map(({id, title}) => ({
+            value: id,
+            name: `${id} ${title}`
+        }));
+        console.table(res);
+        getRole(employee, roleChoices);
+    })
+}
+
+function getRole(employee, roleChoices) {
+    inquirer.prompt([
+        {
+            type: 'list',
+            name: 'employee',
+            message: 'Which employee are you updating?',
+            choices: employee
+        },
+        {
+            type: 'list',
+            name: 'role',
+            message: "What is this employee's new role?",
+            choices: roleChoices
+        }
+    ]).then((res) => {
+        const query = `UPDATE employee SET role_id = ? WHERE id = ?`
+        connection.query(query, [res.role, res.employee], (err, res) => {
+            if(err) throw err;
+            loadPrompts();
+        })
+    })
+};
