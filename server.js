@@ -7,11 +7,11 @@ initApp();
 function initApp() {
     const logoText = logo({ name: "Employee Manager" }).render();
     console.log(logoText);
-    loadMainPrompts();
+    loadPrompts();
 }
 
 function loadPrompts() {
-    prompt([
+    inquirer.prompt([
         {
         type: "list",
         name: "choices",
@@ -51,14 +51,14 @@ function loadPrompts() {
 
 //Functions for above choices
 function viewEmployees() {
-  const query = `SELECT e.id, e.first_name, e.last_name, r.title, d.name AS department, r.salary, CONCAT(m.first_name, ' ', m.last_name) AS manager
-  FROM employee e
-  LEFT JOIN role r
-    ON e.role_id = r.id
-  LEFT JOIN department d
-    ON d.id = r.department_id
-  LEFT JOIN employee m
-    ON m.id = e.manager_id`
+  const query = `SELECT employee.id, employee.first_name, employee.last_name, role.title, department.name AS department, role.salary, CONCAT(manager.first_name, ' ', manager.last_name) AS manager
+  FROM employee 
+  LEFT JOIN role 
+    ON employee.role_id = role.id
+  LEFT JOIN department
+    ON department.id = role.department_id
+  LEFT JOIN employee manager
+    ON manager.id = employee.manager_id`
     connection.query(query, function (err, res) {
         if(err) throw err;
         console.table(res);
@@ -67,7 +67,7 @@ function viewEmployees() {
 };
 
 function viewDepartments() {
-    const query = `SELECT d.id AS id, d.department_name AS department FROM department`;
+    const query = `SELECT * FROM department`;
     connection.query(query, function (err, res) {
         if(err) throw err;
         console.table(res);
@@ -76,11 +76,16 @@ function viewDepartments() {
 )};
 
 function viewRoles() {
-
-}
+    const query = `SELECT * FROM role`;
+    connection.query(query, function (err, res) {
+        if(err) throw err;
+        console.table(res);
+        loadPrompts();
+    }
+)}
 
 function addEmployee() {
-   const query = `SELECT r.id, r.title, r.salary FROM role r`;
+   const query = `SELECT role.id, role.title, role.salary FROM role`;
    connection.query(query, function (err, res) {
     if(err) throw err;
     console.table(res);
@@ -92,8 +97,74 @@ function addEmployee() {
    employeePrompts(roles);
 }
 
+function addDepartment() {
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'department',
+            message: 'What is the department name?'
+        }
+    ]).then((res) => {
+        const query = `INSERT INTO department SET ?`
+        connection.query(query, {name: res.name}, (err, res) => {
+            if(err) throw err;
+            loadPrompts();
+        })
+    })
+}
+
+function addRole() {
+    const selectFrom = `SELECT * FROM department`;
+    const showQuery = `SELECT role.id, role.title, role.salary, role.department_id, department.name as 'department_name
+    FROM role
+    INNER JOIN department ON role.department_id = department.id`;
+    connection.query(showQuery, (err, res) => {
+        if(err) throw err;
+        console.table(res);
+    })
+    connection.query(selectFrom, (err, res) => {
+        if(err) throw err;
+        const department = res.map(({id, name}) => ({
+            value: id,
+            name: `${id} ${name}`
+        }));
+        addRoleInput(department)
+    })
+}
+
+function addRoleInput(department) {
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'title',
+            message: "What is the role's title?"
+        },
+        {
+            type: 'input',
+            name: 'salary',
+            message: "What is the role's salary?"
+        },
+        {
+            type: 'list',
+            name: 'department',
+            message: "What department is this role in?",
+            choices: department
+        }
+    ]).then((res) => {
+        const query = `INSERT INTO role SET ?`
+        connection.query(query, {
+            title: res.title,
+            salary: res.salary,
+            department_id: res.department
+        },(err, res) => {
+            if(err) throw err;
+            loadPrompts();
+        })
+    })
+}
+
 function employeePrompts(roles) {
-    prompt([
+    inquirer.prompt([
         {
             type: 'input',
             name: 'first_name',
@@ -110,14 +181,14 @@ function employeePrompts(roles) {
             message: "What is the employee's role?",
             choices: roles
         }
-    ]) .then(function(answers) {
-        console.log(answers);
+    ]) .then((res) => {
+        console.log(res);
         const query = `INSERT INTO employee SET ?`
         connection.query(query,
             {
-                first_name: answers.first_name,
-                last_name: answers.last_name,
-                roles: answers.roles
+                first_name: res.first_name,
+                last_name: res.last_name,
+                roles: res.roles
             },
             function (err, res) {
                 if(err) throw err;
@@ -126,3 +197,4 @@ function employeePrompts(roles) {
             })
     })
 }
+
